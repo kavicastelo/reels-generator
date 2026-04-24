@@ -1,0 +1,37 @@
+{
+  "name": "reels-generator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "remotion studio src/index.tsx",
+    "build": "remotion render src/index.tsx Reel out/video.mp4",
+    "web": "vite",
+    "web:build": "vite build",
+    "web:preview": "vite preview",
+    "server": "tsx server.ts"
+  },
+  "dependencies": {
+    "@remotion/player": "latest",
+    "@remotion/renderer": "latest",
+    "@remotion/cli": "latest",
+    "@remotion/vercel": "latest",
+    "@vercel/blob": "latest",
+    "lucide-react": "latest",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "latest",
+    "zod": "latest",
+    "express": "latest",
+    "cors": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/express": "latest",
+    "@types/cors": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "^5.0.0",
+    "vite": "latest",
+    "tsx": "latest"
+  }
+}
