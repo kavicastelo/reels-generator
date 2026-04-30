@@ -65,6 +65,8 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
     overlay,
     voiceoverUrl,
     backgroundMusicUrl,
+    logoUrl,
+    logoConfig,
   } = props;
 
   const frame = useCurrentFrame();
@@ -75,11 +77,14 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
     : (backgroundImage ? staticFile(backgroundImage) : undefined);
 
   // Background Music Ducking Logic
-  // Duck to 0.2 during the first 90% of the video (assuming that's the voiceover duration)
-  // or simply duck if voiceoverUrl exists.
+  // Duck to 0.2 when voiceover is present.
+  // We'll calculate offsets based on total duration to avoid errors on short videos.
+  const duckIn = Math.min(30, durationInFrames * 0.1);
+  const duckOut = Math.max(durationInFrames - 30, durationInFrames * 0.9);
+  
   const musicVolume = interpolate(
     frame,
-    [0, 30, durationInFrames - 60, durationInFrames - 30], // Intro/Outro transitions
+    [0, duckIn, duckOut, durationInFrames],
     [1, 0.2, 0.2, 1],
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
   );
@@ -97,12 +102,7 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
         />
       )}
 
-      {overlay === 'dark' && (
-        <AbsoluteFill style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
-      )}
-      {overlay === 'light' && (
-        <AbsoluteFill style={{ backgroundColor: 'rgba(255,255,255,0.3)' }} />
-      )}
+
 
       <Series>
         {scenes.map((scene, i) => {
@@ -124,6 +124,15 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
                     }}
                   />
                 )}
+                
+                {/* Per-scene overlay to ensure it's on top of scene bg */}
+                {overlay === 'dark' && (
+                  <AbsoluteFill style={{ backgroundColor: 'rgba(0,0,0,0.5)', position: 'absolute' }} />
+                )}
+                {overlay === 'light' && (
+                  <AbsoluteFill style={{ backgroundColor: 'rgba(255,255,255,0.3)', position: 'absolute' }} />
+                )}
+
                 <TextAnimation
                   text={scene.text}
                   style={animationStyle}
@@ -136,13 +145,35 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
         })}
       </Series>
 
-      {voiceoverUrl && <Audio src={voiceoverUrl} volume={1.0} />}
+      {voiceoverUrl && (
+        <Audio 
+          src={voiceoverUrl.startsWith('data:') ? voiceoverUrl : staticFile(voiceoverUrl)} 
+          volume={1.0} 
+        />
+      )}
       {backgroundMusicUrl && (
         <Audio 
-          src={backgroundMusicUrl} 
+          src={backgroundMusicUrl.startsWith('data:') ? backgroundMusicUrl : staticFile(backgroundMusicUrl)} 
           volume={voiceoverUrl ? musicVolume : 1.0} 
           loop
         />
+      )}
+
+      {logoUrl && logoConfig && (
+        <AbsoluteFill style={{ pointerEvents: 'none' }}>
+          <Img
+            src={logoUrl.startsWith('data:') ? logoUrl : staticFile(logoUrl)}
+            style={{
+              position: 'absolute',
+              left: `${logoConfig.x}%`,
+              top: `${logoConfig.y}%`,
+              width: `${200 * logoConfig.scale}px`,
+              opacity: logoConfig.opacity,
+              transform: 'translate(-50%, -50%)',
+              filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.3))',
+            }}
+          />
+        </AbsoluteFill>
       )}
     </AbsoluteFill>
   );
