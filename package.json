@@ -11,27 +11,28 @@
     "server": "tsx server.ts"
   },
   "dependencies": {
+    "@remotion/cli": "latest",
     "@remotion/player": "latest",
     "@remotion/renderer": "latest",
-    "@remotion/cli": "latest",
     "@remotion/vercel": "latest",
     "@vercel/blob": "latest",
+    "cors": "latest",
+    "express": "latest",
     "lucide-react": "latest",
+    "ollama": "^0.6.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "remotion": "latest",
-    "zod": "latest",
-    "express": "latest",
-    "cors": "latest"
+    "zod": "latest"
   },
   "devDependencies": {
+    "@types/cors": "latest",
+    "@types/express": "latest",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/express": "latest",
-    "@types/cors": "latest",
     "@vitejs/plugin-react": "latest",
+    "tsx": "latest",
     "typescript": "^5.0.0",
-    "vite": "latest",
-    "tsx": "latest"
+    "vite": "latest"
   }
 }
