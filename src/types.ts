@@ -20,4 +20,11 @@ export interface ReelSchema {
   fps: number;
   voiceoverUrl?: string;
   backgroundMusicUrl?: string;
+  logoUrl?: string;
+  logoConfig?: {
+    x: number;
+    y: number;
+    scale: number;
+    opacity: number;
+  };
 }

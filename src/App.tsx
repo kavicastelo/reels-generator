@@ -43,6 +43,13 @@ const App: React.FC = () => {
   const [renderStatus, setRenderStatus] = useState<string | null>(null);
   const [aiTopic, setAiTopic] = useState("");
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [logoConfig, setLogoConfig] = useState({
+    x: 10,
+    y: 5,
+    scale: 0.5,
+    opacity: 0.8
+  });
 
   const fps = 30;
 
@@ -60,6 +67,8 @@ const App: React.FC = () => {
     fps,
     voiceoverUrl,
     backgroundMusicUrl,
+    logoUrl,
+    logoConfig,
   };
 
   const templates = [
@@ -619,6 +628,57 @@ const App: React.FC = () => {
                   >
                     Remove
                   </button>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1rem' }}>
+                <span className="input-label">
+                  Brand Logo Overlay
+                  {logoUrl && <span style={{ color: '#10b981', marginLeft: '4px' }}>✓</span>}
+                </span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => setLogoUrl(event.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }
+                  }} 
+                  style={{ fontSize: '0.75rem', marginBottom: '0.75rem' }} 
+                />
+                
+                {logoUrl && (
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--card-border)' }}>
+                    <div className="grid-2" style={{ marginBottom: '8px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>X Position (%)</span>
+                        <input type="number" value={logoConfig.x} onChange={(e) => setLogoConfig({...logoConfig, x: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>Y Position (%)</span>
+                        <input type="number" value={logoConfig.y} onChange={(e) => setLogoConfig({...logoConfig, y: Number(e.target.value)})} />
+                      </div>
+                    </div>
+                    <div className="grid-2">
+                      <div>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>Scale</span>
+                        <input type="range" min="0.1" max="2" step="0.1" value={logoConfig.scale} onChange={(e) => setLogoConfig({...logoConfig, scale: Number(e.target.value)})} style={{ width: '100%' }} />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>Opacity</span>
+                        <input type="range" min="0" max="1" step="0.1" value={logoConfig.opacity} onChange={(e) => setLogoConfig({...logoConfig, opacity: Number(e.target.value)})} style={{ width: '100%' }} />
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setLogoUrl(undefined)}
+                      style={{ width: '100%', marginTop: '8px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer', padding: '4px' }}
+                    >
+                      Remove Logo
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
