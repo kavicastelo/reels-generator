@@ -3,24 +3,32 @@ import { Player } from '@remotion/player';
 import { ReelComposition } from './Composition';
 import { ReelSchema, AnimationStyle, OverlayStyle } from './types';
 import ImageEditor from './ImageEditor';
-import { 
-  Play, 
-  Download, 
-  Type, 
-  Image as ImageIcon, 
-  Sparkles, 
-  Volume2, 
-  Palette, 
-  Settings, 
+import {
+  Play,
+  Download,
+  Type,
+  Image as ImageIcon,
+  Sparkles,
+  Volume2,
+  Palette,
+  Settings,
   Layers,
   Loader2,
   Video,
-  Monitor
+  Monitor,
+  Plus,
+  Trash2,
+  Upload
 } from 'lucide-react';
+import { SceneData } from './types';
 
 const App: React.FC = () => {
   const [activeMode, setActiveMode] = useState<'video' | 'image'>('video');
-  const [inputText, setInputText] = useState("Believe\nIn Yourself\nStart Now");
+  const [scenes, setScenes] = useState<SceneData[]>([
+    { text: "Believe", durationInFrames: 60 },
+    { text: "In Yourself", durationInFrames: 60 },
+    { text: "Start Now", durationInFrames: 60 },
+  ]);
   const [backgroundColor, setBackgroundColor] = useState("#09090b");
   const [backgroundImage, setBackgroundImage] = useState<string | undefined>("/background.png");
   const [fontSize, setFontSize] = useState(120);
@@ -29,20 +37,14 @@ const App: React.FC = () => {
   const [overlay, setOverlay] = useState<OverlayStyle>("dark");
   const [sceneDuration, setSceneDuration] = useState(2);
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
+  const [backgroundMusicUrl, setBackgroundMusicUrl] = useState<string | undefined>("/music.mp3");
+  const [voiceoverUrl, setVoiceoverUrl] = useState<string | undefined>(undefined);
   const [isRendering, setIsRendering] = useState(false);
   const [renderStatus, setRenderStatus] = useState<string | null>(null);
+  const [aiTopic, setAiTopic] = useState("");
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
 
   const fps = 30;
-
-  const scenes = useMemo(() => {
-    return inputText
-      .split('\n')
-      .filter(line => line.trim() !== '')
-      .map(line => ({
-        text: line.trim(),
-        durationInFrames: sceneDuration * fps,
-      }));
-  }, [inputText, sceneDuration, fps]);
 
   const totalDurationInFrames = Math.max(1, scenes.reduce((acc, scene) => acc + scene.durationInFrames, 0));
 
@@ -56,7 +58,8 @@ const App: React.FC = () => {
     transitionStyle: 'fade',
     overlay,
     fps,
-    audioUrl,
+    voiceoverUrl,
+    backgroundMusicUrl,
   };
 
   const templates = [
@@ -73,7 +76,8 @@ const App: React.FC = () => {
     setAnimationStyle("slide-up");
     setOverlay("dark");
     setBackgroundImage("/background.png");
-    setAudioUrl(undefined);
+    setVoiceoverUrl(undefined);
+    setBackgroundMusicUrl("/music.mp3");
     setSceneDuration(2);
   };
 
@@ -101,7 +105,7 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setAudioUrl(event.target?.result as string);
+        setBackgroundMusicUrl(event.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -109,7 +113,7 @@ const App: React.FC = () => {
 
   const speak = () => {
     window.speechSynthesis.cancel();
-    const textToSpeak = inputText.replace(/\n/g, '. ');
+    const textToSpeak = scenes.map(s => s.text).join('. ');
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.rate = 1.1;
     window.speechSynthesis.speak(utterance);
@@ -124,12 +128,66 @@ const App: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: inputText.replace(/\n/g, '. ') }),
+        body: JSON.stringify({ text: scenes.map(s => s.text).join('. ') }),
       });
 
       const data = await response.json();
       if (data.success) {
-        setAudioUrl(data.audioUrl);
+        setVoiceoverUrl(data.audioUrl);
+        
+        // Auto-sync timings to scenes
+        if (data.timings && data.timings.length > 0) {
+          console.log('Syncing scenes with timings:', data.timings);
+          const newScenes = [...scenes];
+          let currentTimingIdx = 0;
+
+          newScenes.forEach((scene, i) => {
+            const words = scene.text.split(/\s+/).filter(w => w.length > 0);
+            if (words.length === 0) return;
+
+            // Find start time (first word match)
+            let foundMatch = false;
+            let startIdx = currentTimingIdx;
+            
+            while (currentTimingIdx < data.timings.length) {
+              const timingWord = data.timings[currentTimingIdx].Text.toLowerCase().replace(/[^\w]/g, '');
+              const sceneWord = words[0].toLowerCase().replace(/[^\w]/g, '');
+              if (timingWord === sceneWord || sceneWord.includes(timingWord) || timingWord.includes(sceneWord)) {
+                foundMatch = true;
+                break;
+              }
+              currentTimingIdx++;
+            }
+            
+            // If not found, use the last index we were at
+            if (!foundMatch) currentTimingIdx = startIdx;
+            
+            const startTime = data.timings[currentTimingIdx]?.Offset || 0;
+            
+            // Advance to the end of the scene's words
+            const wordCount = words.length;
+            const expectedEndIdx = Math.min(currentTimingIdx + wordCount - 1, data.timings.length - 1);
+            currentTimingIdx = expectedEndIdx;
+            
+            // The duration is the time until the NEXT word starts (or a bit after the last word)
+            let endTime;
+            if (i === newScenes.length - 1) {
+              // Last scene: add more buffer or look for the very last timing
+              endTime = data.timings[data.timings.length - 1]?.Offset + 1500;
+            } else {
+              endTime = data.timings[currentTimingIdx + 1]?.Offset || (data.timings[currentTimingIdx]?.Offset + 1000);
+            }
+            
+            const durationMs = Math.max(800, endTime - startTime);
+            scene.durationInFrames = Math.ceil((durationMs / 1000) * fps);
+            
+            // Move to next timing for next scene
+            currentTimingIdx++;
+          });
+
+          setScenes(newScenes);
+        }
+
         setRenderStatus('Narration synced!');
         setTimeout(() => setRenderStatus(null), 2000);
       } else {
@@ -143,10 +201,43 @@ const App: React.FC = () => {
     }
   };
 
+  const generateAIScript = async () => {
+    if (!aiTopic) return;
+    setIsGeneratingScript(true);
+    setRenderStatus('AI is brainstorming your script...');
+    try {
+      const response = await fetch('http://localhost:3001/generate-script', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ topic: aiTopic }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        const newScenes = data.script.split('\n').map((line: string) => ({
+          text: line.trim(),
+          durationInFrames: sceneDuration * fps,
+        }));
+        setScenes(newScenes);
+        setRenderStatus('Script generated!');
+        setTimeout(() => setRenderStatus(null), 2000);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('AI Generation failed. Make sure Ollama is running with "llama3" model.');
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   const handleExport = async () => {
     setIsRendering(true);
     setRenderStatus('Initializing render...');
-    
+
     try {
       const isProd = window.location.hostname !== 'localhost';
       const apiUrl = isProd ? '/api/render' : 'http://localhost:3001/render';
@@ -206,7 +297,7 @@ const App: React.FC = () => {
         gap: '0.25rem',
         boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
       }}>
-        <button 
+        <button
           onClick={() => setActiveMode('video')}
           style={{
             padding: '0.6rem 1.2rem',
@@ -226,7 +317,7 @@ const App: React.FC = () => {
           <Video size={16} />
           Reel Generator
         </button>
-        <button 
+        <button
           onClick={() => setActiveMode('image')}
           style={{
             padding: '0.6rem 1.2rem',
@@ -256,14 +347,14 @@ const App: React.FC = () => {
                 <h1>ReelGen</h1>
                 <p style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 500 }}>Create viral content in seconds</p>
               </div>
-              <button 
+              <button
                 onClick={resetToDefaults}
-                style={{ 
-                  background: 'transparent', 
-                  border: '1px solid var(--card-border)', 
-                  borderRadius: '6px', 
-                  padding: '4px 8px', 
-                  fontSize: '0.7rem', 
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
                   color: 'var(--muted)',
                   cursor: 'pointer'
                 }}
@@ -284,13 +375,157 @@ const App: React.FC = () => {
             </div>
 
             <div className="control-group">
-              <label className="section-title"><Type size={14} /> Script</label>
-              <span className="input-label">One line per scene</span>
-              <textarea 
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Type your script here..."
-              />
+              <label className="section-title"><Sparkles size={14} /> AI Assistant</label>
+              <span className="input-label">What is your reel about?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={aiTopic}
+                  onChange={(e) => setAiTopic(e.target.value)}
+                  placeholder="e.g. Morning Routine"
+                  style={{
+                    flex: 1,
+                    background: 'var(--secondary)',
+                    border: '1px solid var(--card-border)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    color: 'white',
+                    fontSize: '0.85rem'
+                  }}
+                />
+                <button
+                  onClick={generateAIScript}
+                  disabled={isGeneratingScript || !aiTopic}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    background: 'var(--primary)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {isGeneratingScript ? <Loader2 size={16} className="spinner" /> : <Sparkles size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="control-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <label className="section-title" style={{ margin: 0 }}><Type size={14} /> Scenes</label>
+                <button
+                  onClick={() => setScenes([...scenes, { text: "New Scene", durationInFrames: sceneDuration * fps }])}
+                  style={{ background: 'var(--primary)', border: 'none', borderRadius: '4px', padding: '4px 8px', color: 'white', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={12} /> Add
+                </button>
+              </div>
+
+              <div className="scenes-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
+                {scenes.map((scene, idx) => (
+                  <div key={idx} className="scene-card" style={{ background: 'var(--secondary)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '12px', position: 'relative' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)' }}>SCENE {idx + 1}</span>
+                      <button
+                        onClick={() => setScenes(scenes.filter((_, i) => i !== idx))}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <textarea
+                      value={scene.text}
+                      onChange={(e) => {
+                        const newScenes = [...scenes];
+                        newScenes[idx].text = e.target.value;
+                        setScenes(newScenes);
+                      }}
+                      style={{ height: '60px', marginBottom: '8px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Duration (s)</span>
+                        <input
+                          type="number"
+                          value={(scene.durationInFrames / fps).toFixed(2)}
+                          step="0.1"
+                          min="0.1"
+                          onChange={(e) => {
+                            const newScenes = [...scenes];
+                            newScenes[idx].durationInFrames = Math.ceil(Number(e.target.value) * fps);
+                            setScenes(newScenes);
+                          }}
+                          style={{
+                            width: '100%',
+                            fontSize: '0.75rem',
+                            padding: '4px 8px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid var(--card-border)',
+                            borderRadius: '4px',
+                            color: 'white'
+                          }}
+                        />
+                      </div>
+                      <div style={{ flex: 2 }}>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Background Asset</span>
+                        <button
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const newScenes = [...scenes];
+                                  newScenes[idx].backgroundImage = event.target?.result as string;
+                                  setScenes(newScenes);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          style={{
+                            width: '100%',
+                            fontSize: '0.7rem',
+                            padding: '6px',
+                            background: scene.backgroundImage ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)',
+                            border: `1px solid ${scene.backgroundImage ? '#10b981' : 'var(--card-border)'}`,
+                            borderRadius: '4px',
+                            color: scene.backgroundImage ? '#10b981' : 'var(--muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <ImageIcon size={12} />
+                          {scene.backgroundImage ? 'Image Attached' : 'Attach BG'}
+                        </button>
+                      </div>
+                      {scene.backgroundImage && (
+                        <button
+                          onClick={() => {
+                            const newScenes = [...scenes];
+                            newScenes[idx].backgroundImage = undefined;
+                            setScenes(newScenes);
+                          }}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', alignSelf: 'flex-end', paddingBottom: '8px' }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="control-group">
@@ -298,18 +533,18 @@ const App: React.FC = () => {
               <div className="grid-2">
                 <div>
                   <span className="input-label">Duration (s)</span>
-                  <input 
-                    type="number" 
-                    value={sceneDuration} 
+                  <input
+                    type="number"
+                    value={sceneDuration}
                     onChange={(e) => setSceneDuration(Number(e.target.value))}
                     min="1"
                   />
                 </div>
                 <div>
                   <span className="input-label">Font Size</span>
-                  <input 
-                    type="number" 
-                    value={fontSize} 
+                  <input
+                    type="number"
+                    value={fontSize}
                     onChange={(e) => setFontSize(Number(e.target.value))}
                   />
                 </div>
@@ -342,24 +577,50 @@ const App: React.FC = () => {
               <label className="section-title"><Layers size={14} /> Overlay & Media</label>
               <div className="tabs" style={{ marginBottom: '1rem' }}>
                 {['none', 'dark', 'light'].map((o) => (
-                  <div 
+                  <div
                     key={o}
-                    className={`tab ${overlay === o ? 'active' : ''}`} 
+                    className={`tab ${overlay === o ? 'active' : ''}`}
                     onClick={() => setOverlay(o as OverlayStyle)}
                   >{o.charAt(0).toUpperCase() + o.slice(1)}</div>
                 ))}
               </div>
               <span className="input-label">
-                Upload Custom Background (Image) 
+                Upload Custom Background (Image)
                 {backgroundImage?.startsWith('data') && <span style={{ color: '#10b981', marginLeft: '4px' }}>✓</span>}
               </span>
               <input type="file" accept="image/*" onChange={handleImageUpload} style={{ fontSize: '0.75rem', marginBottom: '0.75rem' }} />
-              
+
               <span className="input-label">
-                Upload Background Music (MP3)
-                {audioUrl?.startsWith('data') && <span style={{ color: '#10b981', marginLeft: '4px' }}>✓</span>}
+                Background Music (MP3)
+                {backgroundMusicUrl?.startsWith('data') && <span style={{ color: '#10b981', marginLeft: '4px' }}>✓</span>}
               </span>
-              <input type="file" accept="audio/*" onChange={handleAudioUpload} style={{ fontSize: '0.75rem' }} />
+              <input type="file" accept="audio/*" onChange={handleAudioUpload} style={{ fontSize: '0.75rem', marginBottom: '0.75rem' }} />
+
+              <div style={{ 
+                background: 'rgba(255,255,255,0.03)', 
+                padding: '10px', 
+                borderRadius: '8px', 
+                border: '1px solid var(--card-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '0.75rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Volume2 size={14} color={voiceoverUrl ? '#10b981' : 'var(--muted)'} />
+                  <span style={{ color: voiceoverUrl ? 'white' : 'var(--muted)' }}>
+                    {voiceoverUrl ? 'Voiceover Ready' : 'No Voiceover'}
+                  </span>
+                </div>
+                {voiceoverUrl && (
+                  <button 
+                    onClick={() => setVoiceoverUrl(undefined)}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -383,10 +644,10 @@ const App: React.FC = () => {
 
           <div className="preview-area">
             <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10 }}>
-              <div style={{ 
-                background: 'var(--glass)', 
-                padding: '10px 18px', 
-                borderRadius: '100px', 
+              <div style={{
+                background: 'var(--glass)',
+                padding: '10px 18px',
+                borderRadius: '100px',
                 backdropFilter: 'blur(12px)',
                 border: '1px solid var(--glass-border)',
                 fontSize: '0.85rem',

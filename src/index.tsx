@@ -16,7 +16,7 @@ const defaultProps: ReelSchema = {
   transitionStyle: 'fade',
   overlay: 'dark',
   fps: 30,
-  audioUrl: undefined,
+  voiceoverUrl: undefined,
 };
 
 const RemotionVideo: React.FC = () => {

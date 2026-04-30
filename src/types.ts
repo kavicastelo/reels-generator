@@ -5,6 +5,7 @@ export type OverlayStyle = 'none' | 'dark' | 'light';
 export interface SceneData {
   text: string;
   durationInFrames: number;
+  backgroundImage?: string;
 }
 
 export interface ReelSchema {
@@ -17,5 +18,6 @@ export interface ReelSchema {
   transitionStyle: TransitionStyle;
   overlay: OverlayStyle;
   fps: number;
-  audioUrl?: string;
+  voiceoverUrl?: string;
+  backgroundMusicUrl?: string;
 }

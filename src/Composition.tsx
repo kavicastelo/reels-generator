@@ -63,14 +63,26 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
     textColor,
     animationStyle,
     overlay,
-    audioUrl,
+    voiceoverUrl,
+    backgroundMusicUrl,
   } = props;
+
+  const frame = useCurrentFrame();
+  const { durationInFrames, fps } = useVideoConfig();
 
   const resolvedBg = backgroundImage?.startsWith('data:') 
     ? backgroundImage 
     : (backgroundImage ? staticFile(backgroundImage) : undefined);
 
-  const resolvedAudio = audioUrl || staticFile('music.mp3');
+  // Background Music Ducking Logic
+  // Duck to 0.2 during the first 90% of the video (assuming that's the voiceover duration)
+  // or simply duck if voiceoverUrl exists.
+  const musicVolume = interpolate(
+    frame,
+    [0, 30, durationInFrames - 60, durationInFrames - 30], // Intro/Outro transitions
+    [1, 0.2, 0.2, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+  );
 
   return (
     <AbsoluteFill style={{ backgroundColor }}>
@@ -93,21 +105,45 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
       )}
 
       <Series>
-        {scenes.map((scene, i) => (
-          <Series.Sequence key={i} durationInFrames={scene.durationInFrames}>
-            <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-              <TextAnimation
-                text={scene.text}
-                style={animationStyle}
-                fontSize={fontSize}
-                textColor={textColor}
-              />
-            </AbsoluteFill>
-          </Series.Sequence>
-        ))}
+        {scenes.map((scene, i) => {
+          const resolvedSceneBg = scene.backgroundImage?.startsWith('data:') 
+            ? scene.backgroundImage 
+            : (scene.backgroundImage ? staticFile(scene.backgroundImage) : undefined);
+
+          return (
+            <Series.Sequence key={i} durationInFrames={scene.durationInFrames}>
+              <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
+                {resolvedSceneBg && (
+                  <Img
+                    src={resolvedSceneBg}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      position: 'absolute',
+                    }}
+                  />
+                )}
+                <TextAnimation
+                  text={scene.text}
+                  style={animationStyle}
+                  fontSize={fontSize}
+                  textColor={textColor}
+                />
+              </AbsoluteFill>
+            </Series.Sequence>
+          );
+        })}
       </Series>
 
-      <Audio src={resolvedAudio} volume={1.0} />
+      {voiceoverUrl && <Audio src={voiceoverUrl} volume={1.0} />}
+      {backgroundMusicUrl && (
+        <Audio 
+          src={backgroundMusicUrl} 
+          volume={voiceoverUrl ? musicVolume : 1.0} 
+          loop
+        />
+      )}
     </AbsoluteFill>
   );
 };
