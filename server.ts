@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import ollama from 'ollama';
+import { NarratorService } from './api/services/narrator.service';
+import { TTSService } from './api/services/tts.service';
 
 const app = express();
 app.use(cors());
@@ -43,6 +45,35 @@ app.post('/generate-script', async (req, res) => {
     res.json({ success: true, script: scriptText });
   } catch (error) {
     console.error('Script generation failed:', error);
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.post('/analyze-script', async (req, res) => {
+  try {
+    const { text } = req.body;
+    const analysis = await NarratorService.analyzeScript(text);
+    res.json({ success: true, ...analysis });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.post('/tts-advanced', async (req, res) => {
+  try {
+    const { text, voiceProfile, options } = req.body;
+    if (!text) throw new Error('Text is required');
+
+    console.log('Generating Advanced TTS for voice:', voiceProfile, 'with options:', options);
+    const result = await TTSService.generateCinematicAudio(text, voiceProfile || 'default', options);
+
+    res.json({ 
+      success: true, 
+      audioUrl: result.audioUrl,
+      timings: result.timings 
+    });
+  } catch (error) {
+    console.error('Advanced TTS Generation failed:', error);
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
@@ -99,8 +130,14 @@ app.post('/tts', async (req, res) => {
       $timings | ConvertTo-Json | Out-File -FilePath '${timingPath}' -Encoding utf8;
     `.trim();
 
-    const encodedScript = Buffer.from(psScript, 'utf16le').toString('base64');
-    execSync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encodedScript}`);
+    const psScriptPath = path.resolve(`script-${id}.ps1`);
+    fs.writeFileSync(psScriptPath, psScript, { encoding: 'utf8' });
+
+    try {
+      execSync(`powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${psScriptPath}"`);
+    } finally {
+      if (fs.existsSync(psScriptPath)) fs.unlinkSync(psScriptPath);
+    }
 
     // 2. Convert to MP3 using FFmpeg
     execSync(`ffmpeg -i "${wavPath}" -acodec libmp3lame "${mp3Path}" -y`);
