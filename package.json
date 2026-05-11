@@ -23,6 +23,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "remotion": "latest",
+    "wavesurfer.js": "^7.12.6",
     "zod": "latest"
   },
   "devDependencies": {

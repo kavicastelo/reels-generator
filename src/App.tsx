@@ -21,9 +21,17 @@ import {
   Upload
 } from 'lucide-react';
 import { SceneData } from './types';
+import NarrativeEditor from './components/TTSEngine/NarrativeEditor';
+import VoiceSelector from './components/TTSEngine/VoiceSelector';
+import WaveformPreview from './components/TTSEngine/WaveformPreview';
 
 const App: React.FC = () => {
-  const [activeMode, setActiveMode] = useState<'video' | 'image'>('video');
+  const [activeMode, setActiveMode] = useState<'video' | 'image' | 'narrator'>('video');
+  const [narratorScript, setNarratorScript] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [hookScore, setHookScore] = useState<number | undefined>(undefined);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState("dark-cinematic");
   const [scenes, setScenes] = useState<SceneData[]>([
     { text: "Believe", durationInFrames: 60 },
     { text: "In Yourself", durationInFrames: 60 },
@@ -49,6 +57,11 @@ const App: React.FC = () => {
     y: 5,
     scale: 0.5,
     opacity: 0.8
+  });
+  const [speechOptions, setSpeechOptions] = useState({
+    speed: 1.0,
+    stability: 0.5,
+    similarity: 0.75
   });
 
   const fps = 30;
@@ -130,14 +143,18 @@ const App: React.FC = () => {
 
   const generateTTS = async () => {
     setIsRendering(true);
-    setRenderStatus('Generating high-quality narration...');
+    setRenderStatus('Generating cinematic narration...');
     try {
-      const response = await fetch('http://localhost:3001/tts', {
+      const response = await fetch('http://localhost:3001/tts-advanced', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: scenes.map(s => s.text).join('. ') }),
+        body: JSON.stringify({ 
+          text: scenes.map(s => s.text).join('. '),
+          voiceProfile: selectedVoice,
+          options: speechOptions
+        }),
       });
 
       const data = await response.json();
@@ -282,75 +299,59 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container" style={{ gridTemplateColumns: activeMode === 'video' ? '380px 1fr' : '1fr' }}>
-      {isRendering && (
-        <div className="loading-overlay">
-          <div className="spinner"></div>
-          <p style={{ marginTop: '1.5rem', fontWeight: 600 }}>{renderStatus}</p>
+    <div className="app-container">
+      <header className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ 
+            width: '32px', height: '32px', background: 'var(--primary)', 
+            borderRadius: '8px', display: 'flex', alignItems: 'center', 
+            justifyContent: 'center', color: 'white', fontWeight: 800
+          }}>R</div>
+          <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, fontFamily: 'Outfit' }}>ReelGen</h2>
         </div>
-      )}
 
-      {/* Mode Switcher Floating Toggle */}
-      <div style={{
-        position: 'fixed',
-        top: '1.5rem',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 100,
-        background: 'var(--glass)',
-        padding: '0.4rem',
-        borderRadius: '100px',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid var(--glass-border)',
-        display: 'flex',
-        gap: '0.25rem',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+        <nav className="mode-nav">
+          <button 
+            className={`mode-nav-btn ${activeMode === 'video' ? 'active' : ''}`}
+            onClick={() => setActiveMode('video')}
+          >
+            <Video size={16} /> Video
+          </button>
+          <button 
+            className={`mode-nav-btn ${activeMode === 'narrator' ? 'active' : ''}`}
+            onClick={() => setActiveMode('narrator')}
+          >
+            <Volume2 size={16} /> Narrator
+          </button>
+          <button 
+            className={`mode-nav-btn ${activeMode === 'image' ? 'active' : ''}`}
+            onClick={() => setActiveMode('image')}
+          >
+            <ImageIcon size={16} /> Image
+          </button>
+        </nav>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {voiceoverUrl && <Volume2 size={18} color="#10b981" />}
+          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 500 }}>
+            v2.4 Production
+          </div>
+        </div>
+      </header>
+
+      <main className="main-content" style={{ 
+        gridTemplateColumns: activeMode === 'video' ? '380px 1fr' : '1fr' 
       }}>
-        <button
-          onClick={() => setActiveMode('video')}
-          style={{
-            padding: '0.6rem 1.2rem',
-            borderRadius: '100px',
-            border: 'none',
-            background: activeMode === 'video' ? 'var(--primary)' : 'transparent',
-            color: 'white',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.2s'
-          }}
-        >
-          <Video size={16} />
-          Reel Generator
-        </button>
-        <button
-          onClick={() => setActiveMode('image')}
-          style={{
-            padding: '0.6rem 1.2rem',
-            borderRadius: '100px',
-            border: 'none',
-            background: activeMode === 'image' ? 'var(--primary)' : 'transparent',
-            color: 'white',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.2s'
-          }}
-        >
-          <Monitor size={16} />
-          Image Editor
-        </button>
-      </div>
+        {isRendering && (
+          <div className="loading-overlay">
+            <div className="spinner"></div>
+            <p style={{ marginTop: '1.5rem', fontWeight: 600 }}>{renderStatus}</p>
+          </div>
+        )}
 
       {activeMode === 'video' ? (
         <>
-          <div className="sidebar">
+          <div className="sidebar scroll-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h1>ReelGen</h1>
@@ -702,7 +703,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="preview-area">
+          <div className="preview-area scroll-container">
             <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10 }}>
               <div style={{
                 background: 'var(--glass)',
@@ -739,9 +740,211 @@ const App: React.FC = () => {
             </div>
           </div>
         </>
-      ) : (
+      ) : activeMode === 'image' ? (
         <ImageEditor />
+      ) : (
+        <div className="narrator-layout" style={{
+          padding: '100px 40px 40px',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: '1fr 350px',
+          gap: '2rem'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem', background: 'linear-gradient(to right, #fff, #a1a1aa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                AI Narration Director
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: '1.1rem' }}>
+                Transform raw text into high-retention cinematic storytelling.
+              </p>
+            </div>
+
+            <NarrativeEditor
+              script={narratorScript}
+              setScript={setNarratorScript}
+              isAnalyzing={isAnalyzing}
+              hookScore={hookScore}
+              suggestions={suggestions}
+              onAnalyze={async () => {
+                setIsAnalyzing(true);
+                try {
+                  const res = await fetch('http://localhost:3001/analyze-script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: narratorScript })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    setNarratorScript(data.text);
+                    setHookScore(data.hookScore);
+                    setSuggestions(data.suggestions);
+                  }
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setIsAnalyzing(false);
+                }
+              }}
+            />
+
+            <WaveformPreview
+              audioUrl={voiceoverUrl}
+              onExport={() => {
+                const link = document.createElement('a');
+                link.href = voiceoverUrl!;
+                link.download = 'narration.mp3';
+                link.click();
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <VoiceSelector
+              selectedVoice={selectedVoice}
+              onSelect={setSelectedVoice}
+            />
+
+            <div style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--card-border)',
+              borderRadius: '12px',
+              padding: '1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Video size={18} className="text-primary" /> Delivery Options
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="control-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="input-label">Speed</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{speechOptions.speed}x</span>
+                  </div>
+                  <input 
+                    type="range" min="0.5" max="2.0" step="0.1" 
+                    value={speechOptions.speed} 
+                    onChange={(e) => setSpeechOptions({...speechOptions, speed: parseFloat(e.target.value)})}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                </div>
+
+                <div className="control-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="input-label">Stability</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{Math.round(speechOptions.stability * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="1" step="0.05" 
+                    value={speechOptions.stability} 
+                    onChange={(e) => setSpeechOptions({...speechOptions, stability: parseFloat(e.target.value)})}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                </div>
+
+                <div className="control-group" style={{ marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="input-label">Similarity</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{Math.round(speechOptions.similarity * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="1" step="0.05" 
+                    value={speechOptions.similarity} 
+                    onChange={(e) => setSpeechOptions({...speechOptions, similarity: parseFloat(e.target.value)})}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                </div>
+
+                <button 
+                  className="generate-button" 
+                  style={{ width: '100%' }}
+                  disabled={!narratorScript || isRendering}
+                  onClick={async () => {
+                    setIsRendering(true);
+                    setRenderStatus('Generating cinematic narration...');
+                    try {
+                      const res = await fetch('http://localhost:3001/tts-advanced', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          text: narratorScript, 
+                          voiceProfile: selectedVoice,
+                          options: speechOptions
+                        })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        setVoiceoverUrl(data.audioUrl);
+                        const newScenes: SceneData[] = [];
+                        let currentSceneText = "";
+                        let currentSceneDuration = 0;
+                        const parts = narratorScript.split(/(\[PAUSE:[\d.]+s\])/);
+                        
+                        parts.forEach(part => {
+                          if (part.startsWith('[PAUSE:')) {
+                            // Close current scene if exists
+                            if (currentSceneText) {
+                              newScenes.push({ 
+                                text: currentSceneText.replace(/\[\/?EMPHASIS\]/g, '').trim(), 
+                                durationInFrames: Math.ceil((currentSceneDuration / 1000) * fps) 
+                              });
+                              currentSceneText = "";
+                              currentSceneDuration = 0;
+                            }
+                          } else {
+                            currentSceneText += " " + part;
+                            // Estimate duration from words (fallback if timings missing)
+                            currentSceneDuration += part.split(' ').length * 400; 
+                          }
+                        });
+                        
+                        if (currentSceneText) {
+                           newScenes.push({ 
+                             text: currentSceneText.replace(/\[\/?EMPHASIS\]/g, '').trim(), 
+                             durationInFrames: Math.ceil((currentSceneDuration / 1000) * fps) 
+                           });
+                        }
+                        
+                        // If we have actual timings, we could be more precise
+                        // For now, let's just alert the user
+                        setRenderStatus('Narration Ready!');
+                        setTimeout(() => setRenderStatus(null), 2000);
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setIsRendering(false);
+                    }
+                  }}
+                >
+                  <Sparkles size={18} /> Generate Narration
+                </button>
+
+                <button 
+                  className="generate-button secondary-button" 
+                  style={{ width: '100%' }}
+                  onClick={() => {
+                    // Transfer script to video mode
+                    const newScenes = narratorScript.split(/[.!?]+/).filter(s => s.trim()).map(s => ({
+                      text: s.trim().replace(/\[.*?\]/g, ''),
+                      durationInFrames: 2 * fps
+                    }));
+                    setScenes(newScenes);
+                    setActiveMode('video');
+                  }}
+                >
+                  Apply to Reel Project
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
+      </main>
     </div>
   );
 };
