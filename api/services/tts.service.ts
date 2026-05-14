@@ -7,12 +7,13 @@ export interface TTSOptions {
   speed?: number;
   pitch?: number;
   emotion?: string;
+  stability?: number;
+  similarity?: number;
 }
 
 export interface WordTiming {
-  text: string;
-  start: number;
-  end: number;
+  Text: string;
+  Offset: number;
 }
 
 export class TTSService {
@@ -46,13 +47,19 @@ export class TTSService {
         if (fs.existsSync(timingPath)) {
           const timingContent = fs.readFileSync(timingPath, 'utf8').replace(/^\uFEFF/, '');
           if (timingContent.trim()) {
-            const segmentTimings = JSON.parse(timingContent);
+            let segmentTimings = JSON.parse(timingContent);
+            // Handle PowerShell single-item object vs multi-item array
+            if (!Array.isArray(segmentTimings)) {
+              segmentTimings = [segmentTimings];
+            }
+
             segmentTimings.forEach((t: any) => {
-              allTimings.push({
-                text: t.Text,
-                start: totalOffset + t.Offset,
-                end: totalOffset + t.Offset + 100
-              });
+              if (t && t.Text !== undefined) {
+                allTimings.push({
+                  Text: t.Text,
+                  Offset: totalOffset + (t.Offset || 0)
+                } as any);
+              }
             });
             
             const duration = this.getAudioDuration(segmentPath);
@@ -119,11 +126,6 @@ export class TTSService {
   ): Promise<void> {
     const textBase64 = Buffer.from(text).toString('base64');
     
-    // Stability simulation: Jitter the rate slightly if stability is low
-    const stabilityJitter = options.stability !== undefined ? (1 - options.stability) * 2 : 0;
-    const baseRate = options.speed !== undefined ? Math.round((options.speed - 1) * 10) : 0;
-    const finalRate = baseRate + (Math.random() > 0.5 ? stabilityJitter : -stabilityJitter);
-
     const psScript = `
       $ProgressPreference = 'SilentlyContinue';
       Add-Type -AssemblyName System.Speech;
@@ -142,7 +144,6 @@ export class TTSService {
       $synth.add_SpeakProgress($handler);
       
       # Voice Mapping
-      $v = $null;
       switch ('${voiceProfile}') {
         'dark-cinematic' { $synth.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male, [System.Speech.Synthesis.VoiceAge]::Adult); $synth.Rate = -2 }
         'energetic'      { $synth.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female, [System.Speech.Synthesis.VoiceAge]::Adult); $synth.Rate = 2 }
@@ -153,14 +154,27 @@ export class TTSService {
         default          { $synth.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male, [System.Speech.Synthesis.VoiceAge]::Adult) }
       }
 
-      # Apply Overrides
-      if ($null -ne ${options.speed}) { $synth.Rate = [Math]::Max(-10, [Math]::Min(10, ${Math.round(finalRate)})) }
+      # Apply Overrides (Relative to voice default)
+      $speedAdj = 0;
+      if ($null -ne ${options.speed ?? '$null'}) { 
+          $speedAdj = [Math]::Round((${options.speed} - 1.0) * 10);
+      }
+      
+      # Stability Jitter (Internal PS logic)
+      $jitter = 0;
+      $stability = ${options.stability ?? 0.5};
+      if ($stability -lt 0.8) {
+          $jitter = (Get-Random -Minimum -2 -Maximum 2) * (1.0 - $stability);
+      }
+      
+      $finalRate = $synth.Rate + $speedAdj + $jitter;
+      $synth.Rate = [Math]::Max(-10, [Math]::Min(10, [Math]::Round($finalRate)));
       
       $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${textBase64}'));
       $synth.Speak($text);
       $synth.Dispose();
       
-      $timings | ConvertTo-Json | Out-File -FilePath '${timingPath.replace(/'/g, "''")}' -Encoding utf8;
+      @($timings) | ConvertTo-Json | Out-File -FilePath '${timingPath.replace(/'/g, "''")}' -Encoding utf8;
     `.trim();
 
     const psScriptPath = path.join(path.dirname(wavPath), `script-${Date.now()}.ps1`);
