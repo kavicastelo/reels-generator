@@ -18,7 +18,8 @@ import {
   Monitor,
   Plus,
   Trash2,
-  Upload
+  Upload,
+  Mic
 } from 'lucide-react';
 import { SceneData } from './types';
 import NarrativeEditor from './components/TTSEngine/NarrativeEditor';
@@ -47,6 +48,7 @@ const App: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [backgroundMusicUrl, setBackgroundMusicUrl] = useState<string | undefined>("/music.mp3");
   const [voiceoverUrl, setVoiceoverUrl] = useState<string | undefined>(undefined);
+  const [narratorVoiceoverUrl, setNarratorVoiceoverUrl] = useState<string | undefined>(undefined);
   const [isRendering, setIsRendering] = useState(false);
   const [renderStatus, setRenderStatus] = useState<string | null>(null);
   const [aiTopic, setAiTopic] = useState("");
@@ -65,6 +67,13 @@ const App: React.FC = () => {
   });
 
   const fps = 30;
+  
+  const isLocal = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1' || 
+                  window.location.hostname.startsWith('192.168.') || 
+                  window.location.hostname.startsWith('10.');
+  
+  const serverOrigin = isLocal ? `http://${window.location.hostname}:3001` : '';
 
   const totalDurationInFrames = Math.max(1, scenes.reduce((acc, scene) => acc + scene.durationInFrames, 0));
 
@@ -137,7 +146,7 @@ const App: React.FC = () => {
     window.speechSynthesis.cancel();
     const textToSpeak = scenes.map(s => s.text).join('. ');
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 1.1;
+    utterance.rate = speechOptions.speed;
     window.speechSynthesis.speak(utterance);
   };
 
@@ -145,7 +154,7 @@ const App: React.FC = () => {
     setIsRendering(true);
     setRenderStatus('Generating cinematic narration...');
     try {
-      const response = await fetch('http://localhost:3001/tts-advanced', {
+      const response = await fetch(`${serverOrigin}/tts-advanced`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,7 +168,11 @@ const App: React.FC = () => {
 
       const data = await response.json();
       if (data.success) {
-        setVoiceoverUrl(data.audioUrl);
+        let finalAudioUrl = data.audioUrl;
+        if (finalAudioUrl.startsWith('/') && isLocal) {
+          finalAudioUrl = `${serverOrigin}${finalAudioUrl}`;
+        }
+        setVoiceoverUrl(finalAudioUrl);
         
         // Auto-sync timings to scenes
         if (data.timings && data.timings.length > 0) {
@@ -220,8 +233,8 @@ const App: React.FC = () => {
         throw new Error(data.error);
       }
     } catch (error) {
-      console.error(error);
-      alert('TTS Generation failed. Make sure the render server is running.');
+      console.error('TTS Generation error:', error);
+      alert(`TTS Generation failed: ${(error as Error).message}. Make sure the render server is running.`);
     } finally {
       setIsRendering(false);
     }
@@ -232,7 +245,7 @@ const App: React.FC = () => {
     setIsGeneratingScript(true);
     setRenderStatus('AI is brainstorming your script...');
     try {
-      const response = await fetch('http://localhost:3001/generate-script', {
+      const response = await fetch(`${serverOrigin}/generate-script`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -265,8 +278,7 @@ const App: React.FC = () => {
     setRenderStatus('Initializing render...');
 
     try {
-      const isProd = window.location.hostname !== 'localhost';
-      const apiUrl = isProd ? '/api/render' : 'http://localhost:3001/render';
+      const apiUrl = isLocal ? `${serverOrigin}/render` : '/api/render';
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -332,7 +344,8 @@ const App: React.FC = () => {
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {voiceoverUrl && <Volume2 size={18} color="#10b981" />}
+          {voiceoverUrl && activeMode === 'video' && <Volume2 size={18} color="#10b981" />}
+          {narratorVoiceoverUrl && activeMode === 'narrator' && <Volume2 size={18} color="#10b981" />}
           <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 500 }}>
             v2.4 Production
           </div>
@@ -619,7 +632,7 @@ const App: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Volume2 size={14} color={voiceoverUrl ? '#10b981' : 'var(--muted)'} />
                   <span style={{ color: voiceoverUrl ? 'white' : 'var(--muted)' }}>
-                    {voiceoverUrl ? 'Voiceover Ready' : 'No Voiceover'}
+                    {voiceoverUrl ? 'Reel Audio Ready' : 'No Reel Audio'}
                   </span>
                 </div>
                 {voiceoverUrl && (
@@ -681,6 +694,53 @@ const App: React.FC = () => {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="control-group">
+              <label className="section-title"><Mic size={14} /> Voice & Delivery</label>
+              <div style={{ marginBottom: '1rem' }}>
+                <span className="input-label">Select Narrator</span>
+                <select 
+                  value={selectedVoice} 
+                  onChange={(e) => setSelectedVoice(e.target.value)}
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', background: 'var(--input-bg)', border: '1px solid var(--card-border)', color: 'white', fontSize: '0.85rem' }}
+                >
+                  <option value="dark-cinematic">Shadow Narrator (Deep)</option>
+                  <option value="energetic">Pulse Viral (Fast)</option>
+                  <option value="documentary">Historian (Authoritative)</option>
+                  <option value="motivational">The Mentor (Inspiring)</option>
+                  <option value="futuristic">Cyber Oracle (Clean)</option>
+                  <option value="whisper">Whispering Soul (Intimate)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span className="input-label" style={{ margin: 0 }}>Speech Speed</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{speechOptions.speed}x</span>
+                  </div>
+                  <input 
+                    type="range" min="0.5" max="2.0" step="0.1" 
+                    value={speechOptions.speed} 
+                    onChange={(e) => setSpeechOptions({...speechOptions, speed: parseFloat(e.target.value)})}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span className="input-label" style={{ margin: 0 }}>Stability</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{Math.round(speechOptions.stability * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="1" step="0.1" 
+                    value={speechOptions.stability} 
+                    onChange={(e) => setSpeechOptions({...speechOptions, stability: parseFloat(e.target.value)})}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -770,7 +830,7 @@ const App: React.FC = () => {
               onAnalyze={async () => {
                 setIsAnalyzing(true);
                 try {
-                  const res = await fetch('http://localhost:3001/analyze-script', {
+                  const res = await fetch(`${serverOrigin}/analyze-script`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: narratorScript })
@@ -790,10 +850,10 @@ const App: React.FC = () => {
             />
 
             <WaveformPreview
-              audioUrl={voiceoverUrl}
+              audioUrl={narratorVoiceoverUrl}
               onExport={() => {
                 const link = document.createElement('a');
-                link.href = voiceoverUrl!;
+                link.href = narratorVoiceoverUrl!;
                 link.download = 'narration.mp3';
                 link.click();
               }}
@@ -867,7 +927,7 @@ const App: React.FC = () => {
                     setIsRendering(true);
                     setRenderStatus('Generating cinematic narration...');
                     try {
-                      const res = await fetch('http://localhost:3001/tts-advanced', {
+                      const res = await fetch(`${serverOrigin}/tts-advanced`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
@@ -878,7 +938,11 @@ const App: React.FC = () => {
                       });
                       const data = await res.json();
                       if (data.success) {
-                        setVoiceoverUrl(data.audioUrl);
+                        let finalAudioUrl = data.audioUrl;
+                        if (finalAudioUrl.startsWith('/') && isLocal) {
+                          finalAudioUrl = `${serverOrigin}${finalAudioUrl}`;
+                        }
+                        setNarratorVoiceoverUrl(finalAudioUrl);
                         const newScenes: SceneData[] = [];
                         let currentSceneText = "";
                         let currentSceneDuration = 0;
@@ -915,7 +979,8 @@ const App: React.FC = () => {
                         setTimeout(() => setRenderStatus(null), 2000);
                       }
                     } catch (err) {
-                      console.error(err);
+                      console.error('Narrator TTS error:', err);
+                      alert(`TTS Generation failed: ${(err as Error).message}`);
                     } finally {
                       setIsRendering(false);
                     }

@@ -11,10 +11,10 @@
     "server": "tsx server.ts"
   },
   "dependencies": {
-    "@remotion/cli": "latest",
-    "@remotion/player": "latest",
-    "@remotion/renderer": "latest",
-    "@remotion/vercel": "latest",
+    "@remotion/cli": "4.0.451",
+    "@remotion/player": "4.0.451",
+    "@remotion/renderer": "4.0.451",
+    "@remotion/vercel": "4.0.451",
     "@vercel/blob": "latest",
     "cors": "latest",
     "express": "latest",
@@ -22,7 +22,7 @@
     "ollama": "^0.6.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "remotion": "latest",
+    "remotion": "4.0.451",
     "wavesurfer.js": "^7.12.6",
     "zod": "latest"
   },

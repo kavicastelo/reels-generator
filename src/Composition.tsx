@@ -147,13 +147,13 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
 
       {voiceoverUrl && (
         <Audio 
-          src={voiceoverUrl.startsWith('data:') ? voiceoverUrl : staticFile(voiceoverUrl)} 
+          src={(voiceoverUrl.startsWith('data:') || voiceoverUrl.startsWith('http')) ? voiceoverUrl : staticFile(voiceoverUrl)} 
           volume={1.0} 
         />
       )}
       {backgroundMusicUrl && (
         <Audio 
-          src={backgroundMusicUrl.startsWith('data:') ? backgroundMusicUrl : staticFile(backgroundMusicUrl)} 
+          src={(backgroundMusicUrl.startsWith('data:') || backgroundMusicUrl.startsWith('http')) ? backgroundMusicUrl : staticFile(backgroundMusicUrl)} 
           volume={voiceoverUrl ? musicVolume : 1.0} 
           loop
         />
@@ -162,7 +162,7 @@ export const ReelComposition: React.FC<ReelSchema> = (props) => {
       {logoUrl && logoConfig && (
         <AbsoluteFill style={{ pointerEvents: 'none' }}>
           <Img
-            src={logoUrl.startsWith('data:') ? logoUrl : staticFile(logoUrl)}
+            src={(logoUrl.startsWith('data:') || logoUrl.startsWith('http')) ? logoUrl : staticFile(logoUrl)}
             style={{
               position: 'absolute',
               left: `${logoConfig.x}%`,
